@@ -5,7 +5,7 @@ import axios from 'axios';
 const Register = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    username: '',
+    name: '',
     password: '',
     email: '',
   });
@@ -15,7 +15,7 @@ const Register = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.username || !formData.password || !formData.email) {
+    if (!formData.name || !formData.password || !formData.email) {
       setError('All fields are required');
       return;
     }
@@ -48,8 +48,8 @@ const Register = () => {
         <input
           type="text"
           placeholder="Username"
-          value={formData.username}
-          onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
         />
         <input
           type="email"

@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
 
-const userSchema = new Schema({
-    username: {
+const userSchema = new mongoose.Schema({
+    name: {
         type: String,
         required: true
     },
@@ -15,15 +16,29 @@ const userSchema = new Schema({
         type: String,
         required: true
     },
+    apiKey: {
+        type: String,
+        default: uuidv4,
+        unique: true
+    },
     role: {
         type: String,
         enum: ['student', 'teacher', 'admin', 'parent'],
-        default: 'student'
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
+        required: true
     }
+}, {
+    timestamps: true
 });
+
+userSchema.pre('save', async function(next) {
+    if (this.isModified('password')) {
+        this.password = await bcrypt.hash(this.password, 8);
+    }
+    next();
+});
+
+userSchema.methods.comparePassword = async function(password) {
+    return bcrypt.compare(password, this.password);
+};
 
 module.exports = mongoose.model('User', userSchema);

@@ -1,8 +1,9 @@
 const User = require('../models/User');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+let classes = []; // Temporary in-memory store for classes
 
-// Register user
+// Existing code (do not modify)
 const registerUser = async (req, res) => {
   const { username, password, email } = req.body;
 
@@ -22,7 +23,6 @@ const registerUser = async (req, res) => {
   }
 };
 
-// Login user
 const loginUser = async (req, res) => {
   const { username, password } = req.body;
 
@@ -43,7 +43,7 @@ const loginUser = async (req, res) => {
     res.status(500).json({ message: 'Error logging in user' });
   }
 };
-//register
+
 const createTeacher = async (req, res) => {
   const { username, password, email } = req.body;
 
@@ -63,5 +63,51 @@ const createTeacher = async (req, res) => {
   }
 };
 
+// Additional Code (New Features)
 
-module.exports = { registerUser, loginUser, createTeacher };
+// Fetch all teachers
+const getTeachers = async (req, res) => {
+  try {
+    const teachers = await User.find({ role: 'teacher' }); // Assuming a `role` field exists in User schema
+    res.status(200).json(teachers);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching teachers', error });
+  }
+};
+
+// Fetch all classes
+const getClasses = (req, res) => {
+  res.status(200).json(classes);
+};
+
+// Add a new class
+const addClass = (req, res) => {
+  const { name, teacherId } = req.body;
+
+  const newClass = { id: Date.now().toString(), name, teacherId };
+  classes.push(newClass);
+  res.status(201).json({ message: 'Class created successfully', class: newClass });
+};
+
+// Delete a class
+const deleteClass = (req, res) => {
+  const { id } = req.params;
+  const index = classes.findIndex((cls) => cls.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ message: 'Class not found' });
+  }
+
+  classes.splice(index, 1);
+  res.status(204).send();
+};
+
+module.exports = {
+  registerUser,
+  loginUser,
+  createTeacher,
+  getTeachers,
+  getClasses,
+  addClass,
+  deleteClass,
+};
