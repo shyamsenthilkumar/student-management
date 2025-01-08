@@ -1,4 +1,3 @@
-// models/Teacher.js
 const mongoose = require('mongoose');
 
 const teacherSchema = new mongoose.Schema({
@@ -17,7 +16,7 @@ const teacherSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        default: 'teacher',
+        default: 'teacher',  // Default role is 'teacher'
     },
 });
 

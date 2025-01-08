@@ -3,123 +3,328 @@ import axios from 'axios';
 
 const AdminDashboard = () => {
     const [formData, setFormData] = useState({
-        name: '',
+        username: '',
         password: '',
         email: '',
-        role: 'teacher',
+        role: 'teacher' // Added role field
     });
+    
     const [teachers, setTeachers] = useState([]);
+    const [classrooms, setClassrooms] = useState([]);
+    const [newClassroom, setNewClassroom] = useState({
+        standard: '',
+        section: '',
+        teacherId: '',
+        roomNumber: '',
+        capacity: ''
+    });
+    
+    useEffect(() => {
+        fetchTeachers();
+        fetchClassrooms();
+    }, []);
 
-    // Fetch teachers when the component mounts
     const fetchTeachers = async () => {
-        try {
-            const token = localStorage.getItem('apiKey');
-            const response = await axios.get('http://localhost:5000/api/auth/admin/get-teachers', {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                },
-            });
+      try {
+          const token = localStorage.getItem('apiKey');
+          const response = await axios.get('http://localhost:5000/api/auth/admin/get-teachers', {
+              headers: {
+                  Authorization: `Bearer ${token}`,
+              },
+          });
+          setTeachers(response.data.teachers);
+      } catch (error) {
+          console.error('Error fetching teachers:', error);
+          alert(error.response?.data?.message || 'Failed to fetch teachers');
+      }
+  };
+  
+  
+  
 
-            setTeachers(response.data.teachers); // Update the teachers list
+
+  useEffect(() => {
+      fetchTeachers(); // Fetch teachers when the component mounts
+  }, []);
+
+    const fetchClassrooms = async () => {
+        try {
+            const apiKey = localStorage.getItem('apiKey');
+            const response = await axios.get('http://localhost:5000/api/classrooms', {
+                headers: {
+                    'X-API-Key': apiKey
+                }
+            });
+            setClassrooms(response.data);
         } catch (error) {
-            console.error('Error fetching teachers:', error);
-            alert(error.response?.data?.message || 'Failed to fetch teachers');
+            console.error('Failed to fetch classrooms:', error);
+            alert(error.response?.data?.message || 'Error fetching classrooms');
         }
     };
 
-    useEffect(() => {
-        fetchTeachers(); // Fetch teachers when the component mounts
-    }, []);
-
     const createTeacher = async (e) => {
-        e.preventDefault();
+      e.preventDefault();
+      try {
+          const token = localStorage.getItem('apiKey');  // Get the token from localStorage
+          
+          // Get the role from the form or default to 'teacher'
+          const role = 'teacher';  // This can be changed dynamically if needed (e.g., for admins)
+  
+          // Make POST request to create teacher
+          await axios.post(
+              'http://localhost:5000/api/auth/admin/create-teacher',
+              {
+                  name: formData.name,
+                  email: formData.email,
+                  password: formData.password,
+                  role: role  // Include role in the request body
+              },
+              {
+                  headers: {
+                      'Authorization': `Bearer ${token}`  // Pass the token in Authorization header
+                  }
+              }
+          );
+          
+          alert('Teacher created successfully');
+          setFormData({ name: '', password: '', email: '' });  // Clear the form
+          fetchTeachers();  // Fetch updated list of teachers
+      } catch (error) {
+          alert(error.response?.data?.message || 'Failed to create teacher');
+      }
+  };
+  useEffect(() => {
+    fetchTeachers();
+}, []);
+
+const createClassroom = async (e) => {
+  e.preventDefault();
+  
+  // Validate all required fields
+  if (!newClassroom.standard || !newClassroom.section || 
+      !newClassroom.roomNumber || !newClassroom.capacity) {
+      alert('Please fill in all required fields');
+      return;
+  }
+
+  try {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+          alert('Not authenticated. Please log in.');
+          return;
+      }
+
+      const response = await axios.post(
+          'http://localhost:5000/auth/admin/classrooms',
+          {
+              standard: newClassroom.standard,
+              section: newClassroom.section,
+              roomNumber: newClassroom.roomNumber,
+              capacity: parseInt(newClassroom.capacity),
+              teacherId: newClassroom.teacherId || undefined // Only send if selected
+          },
+          {
+              headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+              }
+          }
+      );
+
+      if (response.status === 201) {
+          alert('Classroom created successfully');
+          setNewClassroom({
+              standard: '',
+              section: '',
+              teacherId: '',
+              roomNumber: '',
+              capacity: ''
+          });
+          if (typeof fetchClassrooms === 'function') {
+              fetchClassrooms();
+          }
+      }
+  } catch (error) {
+      console.error('Error details:', error.response?.data);
+      if (error.response?.status === 401) {
+          alert('Session expired. Please log in again.');
+          localStorage.removeItem('token');
+      } else if (error.response?.status === 403) {
+          alert('You do not have permission to create classrooms');
+      } else {
+          const errorMessage = error.response?.data?.message || 'Failed to create classroom';
+          alert(errorMessage);
+      }
+  }
+};
+    const updateClassroom = async (id, updates) => {
         try {
-            const token = localStorage.getItem('apiKey');
-            await axios.post(
-                'http://localhost:5000/api/auth/admin/create-teacher',
-                {
-                    name: formData.name,
-                    email: formData.email,
-                    password: formData.password,
-                },
+            const apiKey = localStorage.getItem('apiKey');
+            await axios.put(
+                `http://localhost:5000/api/classrooms/${id}`,
+                updates,
                 {
                     headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
+                        'X-API-Key': apiKey
+                    }
                 }
             );
-
-            alert('Teacher created successfully');
-            setFormData({ name: '', password: '', email: '' }); // Reset form fields
-            fetchTeachers(); // Re-fetch teachers after creation
+            fetchClassrooms();
         } catch (error) {
-            console.error('Error creating teacher:', error);
-            alert(error.response?.data?.message || 'Failed to create teacher');
+            alert(error.response?.data?.message || 'Failed to update classroom');
         }
     };
 
     return (
         <div className="p-6">
             <h2 className="text-2xl font-bold mb-4">Admin Dashboard</h2>
-
+            
             {/* Create Teacher Form */}
             <div className="mb-8 bg-white p-6 rounded-lg shadow-lg">
-                <h3 className="text-xl mb-4">Create Teacher Account</h3>
-                <form onSubmit={createTeacher} className="space-y-4">
-                    <input
-                        type="text"
-                        placeholder="Name"
-                        value={formData.name}
-                        className="w-full p-2 border rounded"
-                        onChange={(e) =>
-                            setFormData({ ...formData, name: e.target.value })
-                        }
-                        required
-                    />
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={formData.password}
-                        className="w-full p-2 border rounded"
-                        onChange={(e) =>
-                            setFormData({ ...formData, password: e.target.value })
-                        }
-                        required
-                    />
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        value={formData.email}
-                        className="w-full p-2 border rounded"
-                        onChange={(e) =>
-                            setFormData({ ...formData, email: e.target.value })
-                        }
-                        required
-                    />
-                    <button
-                        type="submit"
-                        className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                        Create Teacher
-                    </button>
-                </form>
-            </div>
+    <h3 className="text-xl mb-4">Create Teacher Account</h3>
+    <form onSubmit={createTeacher} className="space-y-4">
+        <input
+            type="text"
+            placeholder="Username"
+            value={formData.name}
+            className="w-full p-2 border rounded"
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required
+        />
+        <input
+            type="password"
+            placeholder="Password"
+            value={formData.password}
+            className="w-full p-2 border rounded"
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            required
+        />
+        <input
+            type="email"
+            placeholder="Email"
+            value={formData.email}
+            className="w-full p-2 border rounded"
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            required
+        />
+        <select
+            value={formData.role}
+            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+            className="w-full p-2 border rounded"
+            required
+        >
+            <option value="teacher">Teacher</option>
+        </select>
+        <button
+            type="submit"
+            className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+            Create Teacher
+        </button>
+    </form>
+</div>
 
-            {/* Teachers List */}
-            <div className="bg-white p-6 rounded-lg shadow-lg">
-                <h3 className="text-xl mb-4">Teachers List</h3>
-                {teachers.length > 0 ? (
-                    <ul>
-                        {teachers.map((teacher) => (
-                            <li key={teacher._id}>
-                                {teacher.name} - {teacher.email}
-                            </li>
-                        ))}
-                    </ul>
-                ) : (
-                    <p>No teachers found.</p>
-                )}
-            </div>
+            {/* Create Classroom Form */}
+            <div className="mb-8 bg-white p-6 rounded-lg shadow-lg">
+        <h3 className="text-xl mb-4">Create Classroom</h3>
+        <form onSubmit={createClassroom} className="space-y-4">
+            <select
+                value={newClassroom.standard}
+                onChange={(e) => setNewClassroom({ ...newClassroom, standard: e.target.value })}
+                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+            >
+                <option value="">Select Standard</option>
+                {[...Array(12)].map((_, i) => (
+                    <option key={i + 1} value={i + 1}>
+                        Class {i + 1}
+                    </option>
+                ))}
+            </select>
+
+            <input
+                type="text"
+                placeholder="Section (e.g., A, B, C)"
+                value={newClassroom.section}
+                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setNewClassroom({ ...newClassroom, section: e.target.value.toUpperCase() })}
+                required
+                maxLength={1}
+            />
+
+            <select
+                value={newClassroom.teacherId}
+                onChange={(e) => setNewClassroom({ ...newClassroom, teacherId: e.target.value })}
+                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+                <option value="">Select Class Teacher</option>
+                {teachers.map((teacher) => (
+                    <option key={teacher._id} value={teacher._id}>
+                        {teacher.name}
+                    </option>
+                ))}
+            </select>
+
+            <input
+                type="text"
+                placeholder="Room Number"
+                value={newClassroom.roomNumber}
+                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setNewClassroom({ ...newClassroom, roomNumber: e.target.value })}
+                required
+            />
+
+            <input
+                type="number"
+                placeholder="Capacity"
+                value={newClassroom.capacity}
+                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={(e) => setNewClassroom({ ...newClassroom, capacity: e.target.value })}
+                required
+                min="1"
+                max="100"
+            />
+
+            <button
+                type="submit"
+                className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            >
+                Create Classroom
+            </button>
+        </form>
+    </div>
+
+{/* Display Classrooms */}
+<h3 className="text-xl mb-4">Classrooms</h3>
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  {classrooms.map((classroom) => (
+    <div key={classroom._id} className="p-4 bg-white rounded-lg shadow">
+      <h4 className="text-lg font-bold mb-2">
+        Class {classroom.standard}-{classroom.section}
+      </h4>
+      <p>Room: {classroom.roomNumber}</p>
+      <p>Capacity: {classroom.capacity}</p>
+      <p>
+        Teacher: {teachers.find((t) => t._id === classroom.teacherId)?.username || 'Unassigned'}
+      </p>
+      <select
+        value={classroom.teacherId || ''}
+        onChange={(e) => updateClassroom(classroom._id, { teacherId: e.target.value })}
+        className="mt-2 w-full p-2 border rounded"
+      >
+        <option value="">Change Teacher</option>
+        {teachers.map((teacher) => (
+          <option key={teacher._id} value={teacher._id}>
+            {teacher.username}
+          </option>
+        ))}
+      </select>
+    </div>
+  ))}
+</div>
+
+            
         </div>
     );
 };

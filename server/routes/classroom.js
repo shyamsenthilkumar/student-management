@@ -31,21 +31,42 @@ router.get('/classrooms/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// Create classroom
-router.post('/classrooms', authMiddleware, async (req, res) => {
+router.post('/auth/admin/classrooms', authMiddleware, async (req, res) => {
     try {
+        // Role checking using JWT user data
         if (req.user.role !== 'teacher' && req.user.role !== 'admin') {
-            return res.status(403).json({ message: 'Only teachers can create classrooms' });
+            return res.status(403).json({ 
+                message: 'Only teachers and admins can create classrooms' 
+            });
         }
 
+        // Input validation
+        const { standard, section, roomNumber, capacity } = req.body;
+        if (!standard || !section || !roomNumber || !capacity) {
+            return res.status(400).json({ 
+                message: 'Missing required fields' 
+            });
+        }
+
+        // Create classroom with sanitized data
         const classroom = new Classroom({
-            ...req.body,
-            teacher: req.user._id
+            standard: standard.trim(),
+            section: section.trim(),
+            roomNumber: roomNumber.trim(),
+            capacity: parseInt(capacity),
+            teacher: req.user._id,
+            createdAt: new Date(),
+            updatedAt: new Date()
         });
+
         await classroom.save();
         res.status(201).json(classroom);
     } catch (error) {
-        res.status(400).json({ message: error.message });
+        console.error('Classroom creation error:', error);
+        res.status(400).json({ 
+            message: 'Failed to create classroom',
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 });
 
