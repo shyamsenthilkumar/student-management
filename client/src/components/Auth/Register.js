@@ -8,6 +8,7 @@ const Register = () => {
     name: '',
     password: '',
     email: '',
+    role: 'admin', // Set role as 'admin' for all users
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

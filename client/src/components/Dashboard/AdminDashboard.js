@@ -25,19 +25,29 @@ const AdminDashboard = () => {
     }, []);
 
     const fetchTeachers = async () => {
-      try {
-          const token = localStorage.getItem('apiKey');
-          const response = await axios.get('http://localhost:5000/api/auth/admin/get-teachers', {
-              headers: {
-                  Authorization: `Bearer ${token}`,
-              },
-          });
-          setTeachers(response.data.teachers);
-      } catch (error) {
-          console.error('Error fetching teachers:', error);
-          alert(error.response?.data?.message || 'Failed to fetch teachers');
-      }
-  };
+        try {
+            const token = localStorage.getItem('apiKey');
+            if (!token) {
+                alert('Please log in first');
+                window.location.href = '/login';
+                return;
+            }
+    
+            const response = await axios.get('http://localhost:5000/api/auth/admin/get-teachers', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+            });
+            setTeachers(response.data.teachers);
+        } catch (error) {
+            console.error('Error fetching teachers:', error);
+            if (error.response?.status === 401) {
+                localStorage.removeItem('apiKey');
+                window.location.href = '/login';
+            }
+            alert(error.response?.data?.message || 'Failed to fetch teachers');
+        }
+    };
   
   
   
@@ -45,22 +55,27 @@ const AdminDashboard = () => {
 
   useEffect(() => {
       fetchTeachers(); // Fetch teachers when the component mounts
+      fetchClassrooms();
   }, []);
 
-    const fetchClassrooms = async () => {
-        try {
-            const apiKey = localStorage.getItem('apiKey');
-            const response = await axios.get('http://localhost:5000/api/classrooms', {
-                headers: {
-                    'X-API-Key': apiKey
-                }
-            });
-            setClassrooms(response.data);
-        } catch (error) {
-            console.error('Failed to fetch classrooms:', error);
-            alert(error.response?.data?.message || 'Error fetching classrooms');
+  const fetchClassrooms = async () => {
+    try {
+        const token = localStorage.getItem('apiKey');
+        const response = await axios.get('http://localhost:5000/api/classrooms', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        setClassrooms(response.data);
+    } catch (error) {
+        console.error('Failed to fetch classrooms:', error);
+        if (error.response?.status === 401) {
+            localStorage.removeItem('apiKey');
+            window.location.href = '/login';
         }
-    };
+        alert(error.response?.data?.message || 'Error fetching classrooms');
+    }
+};
 
     const createTeacher = async (e) => {
       e.preventDefault();
@@ -97,66 +112,85 @@ const AdminDashboard = () => {
     fetchTeachers();
 }, []);
 
+
 const createClassroom = async (e) => {
-  e.preventDefault();
-  
-  // Validate all required fields
-  if (!newClassroom.standard || !newClassroom.section || 
-      !newClassroom.roomNumber || !newClassroom.capacity) {
-      alert('Please fill in all required fields');
-      return;
-  }
+    e.preventDefault();
+    const token = localStorage.getItem('apiKey');
+    
+    // Validate all required fields
+    if (!newClassroom.standard || !newClassroom.section || 
+        !newClassroom.roomNumber || !newClassroom.capacity) {
+        alert('Please fill in all required fields');
+        return;
+    }
 
-  try {
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
-          alert('Not authenticated. Please log in.');
-          return;
-      }
+    try {
+        // Check if token exists
+        if (!token) {
+            alert('Not authenticated. Please log in.');
+            window.location.href = '/login'; // Redirect to login page
+            return;
+        }
 
-      const response = await axios.post(
-          'http://localhost:5000/auth/admin/classrooms',
-          {
-              standard: newClassroom.standard,
-              section: newClassroom.section,
-              roomNumber: newClassroom.roomNumber,
-              capacity: parseInt(newClassroom.capacity),
-              teacherId: newClassroom.teacherId || undefined // Only send if selected
-          },
-          {
-              headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-              }
-          }
-      );
+        // Prepare request payload and headers
+        const response = await axios.post(
+            'http://localhost:5000/api/auth/admin/classrooms',
+            {
+                standard: newClassroom.standard.trim(),
+                section: newClassroom.section.trim().toUpperCase(),
+                roomNumber: newClassroom.roomNumber.trim(),
+                capacity: parseInt(newClassroom.capacity),
+                teacherId: newClassroom.teacherId || undefined, // Optional if the teacher is auto-assigned
+                students: newClassroom.students // Send selected students
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
 
-      if (response.status === 201) {
-          alert('Classroom created successfully');
-          setNewClassroom({
-              standard: '',
-              section: '',
-              teacherId: '',
-              roomNumber: '',
-              capacity: ''
-          });
-          if (typeof fetchClassrooms === 'function') {
-              fetchClassrooms();
-          }
-      }
-  } catch (error) {
-      console.error('Error details:', error.response?.data);
-      if (error.response?.status === 401) {
-          alert('Session expired. Please log in again.');
-          localStorage.removeItem('token');
-      } else if (error.response?.status === 403) {
-          alert('You do not have permission to create classrooms');
-      } else {
-          const errorMessage = error.response?.data?.message || 'Failed to create classroom';
-          alert(errorMessage);
-      }
-  }
+        // Handle successful response
+        if (response.status === 201) {
+            alert('Classroom created successfully');
+            
+            // Reset form fields
+            setNewClassroom({
+                standard: '',
+                section: '',
+                teacherId: '',
+                roomNumber: '',
+                capacity: '',
+                students: []
+            });
+
+            // Refresh classroom list
+            await fetchClassrooms();
+        }
+    } catch (error) {
+        console.error('Error details:', error.response?.data);
+
+        // Error handling based on status code
+        switch (error.response?.status) {
+            case 400:
+                alert(error.response.data.message || 'Invalid classroom data. Please check your inputs.');
+                break;
+            case 401:
+                alert('Session expired. Please log in again.');
+                localStorage.removeItem('apiKey');
+                window.location.href = '/login'; // Redirect to login page
+                break;
+            case 403:
+                alert('You do not have permission to create classrooms. Only teachers and admins can create classrooms.');
+                break;
+            case 409:
+                alert('A classroom with these details already exists.');
+                break;
+            default:
+                alert('Failed to create classroom. Please try again later.');
+        }
+    }
 };
     const updateClassroom = async (id, updates) => {
         try {
