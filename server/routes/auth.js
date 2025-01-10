@@ -252,107 +252,130 @@ router.post('/auth/admin/create-teacher', async (req, res) => {
         }
     });
 
-    // Teacher route to create parent account
-    router.post('/users/create-parent', verifyTeacherToken, async (req, res) => {
-        const { username, email, password } = req.body;
-
-        if (!username || !email || !password) {
-            return res.status(400).json({ message: 'All fields are required' });
-        }
-
-        try {
-            const userExists = await User.findOne({ email });
-            if (userExists) {
-                return res.status(400).json({ message: 'User already exists' });
-            }
-
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(password, salt);
-
-            const newParent = new User({
-                username,
-                email,
-                password: hashedPassword,
-                role: 'parent'
-            });
-
-            await newParent.save();
-            const token = uuidv4();
-
-            res.status(201).json({
-                message: 'Parent account created successfully',
-                token,
-                user: { 
-                    id: newParent._id, 
-                    username: newParent.username, 
-                    email: newParent.email,
-                    role: newParent.role 
-                }
-            });
-        } catch (error) {
-            console.error('Error creating parent account:', error);
-            res.status(500).json({ message: 'Server error' });
-        }
-    });
     router.post('/auth/admin/classrooms', authMiddleware, async (req, res) => {
-        const { standard, section, roomNumber, capacity, students } = req.body;
-    
+        const { standard, section, roomNumber, capacity, teacherId, students } = req.body;
+        
         try {
-            // Role validation: Only teacher or admin can create a classroom
             if (req.user.role !== 'teacher' && req.user.role !== 'admin') {
                 return res.status(403).json({ message: 'Only teachers and admins can create classrooms' });
             }
-    
-            // Input validation
-            if (!standard || !section || !roomNumber || !capacity) {
+            
+            if (!standard || !section || !roomNumber || !capacity || !teacherId) {
                 return res.status(400).json({ message: 'All fields are required' });
             }
+            
+            // Verify teacher exists
+            const teacher = await Teacher.findById(teacherId);
+            if (!teacher) {
+                return res.status(404).json({ message: 'Teacher not found' });
+            }
     
-            // Check if classroom already exists with the same details
+            // Check if classroom already exists
             const classroomExists = await Classroom.findOne({
                 standard: standard.trim(),
                 section: section.trim().toUpperCase(),
-                roomNumber: roomNumber.trim()
+                roomNumber: roomNumber.trim(),
             });
-    
+            
             if (classroomExists) {
                 return res.status(409).json({ message: 'Classroom already exists' });
             }
-    
-            // Create a new classroom
+            
+            // Create new classroom with teacher reference
             const newClassroom = new Classroom({
                 standard: standard.trim(),
                 section: section.trim().toUpperCase(),
                 roomNumber: roomNumber.trim(),
                 capacity: parseInt(capacity),
-                teacherId: req.user.id, // Use the ID of the authenticated user (teacher/admin)
-                students: students || [],  // Assign students if provided
+                teacherId: teacherId,
+                students: students || [],
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
             });
-    
+            
             await newClassroom.save();
-    
+            
+            // Update teacher's classrooms array
+            await Teacher.findByIdAndUpdate(
+                teacherId,
+                { $push: { classrooms: newClassroom._id } }
+            );
+            
+            // Send response with populated teacher data
+            const populatedClassroom = await Classroom.findById(newClassroom._id)
+                .populate('teacherId', 'name email');
+                
             res.status(201).json({
                 message: 'Classroom created successfully',
                 classroom: {
-                    id: newClassroom._id,
-                    standard: newClassroom.standard,
-                    section: newClassroom.section,
-                    roomNumber: newClassroom.roomNumber,
-                    capacity: newClassroom.capacity,
-                    teacherId: newClassroom.teacherId,
-                    students: newClassroom.students
-                }
+                    id: populatedClassroom._id,
+                    standard: populatedClassroom.standard,
+                    section: populatedClassroom.section,
+                    roomNumber: populatedClassroom.roomNumber,
+                    capacity: populatedClassroom.capacity,
+                    teacher: populatedClassroom.teacherId,
+                    students: populatedClassroom.students,
+                },
             });
         } catch (error) {
             console.error('Error during classroom creation:', error);
             res.status(500).json({ message: 'Server error' });
         }
     });
+    router.get('/auth/admin/fetch-classrooms', authMiddleware, async (req, res) => {
+        try {
+            const classrooms = await Classroom.find()
+                .populate('teacherId', 'name email')
+                .lean();
+            
+            const formattedClassrooms = classrooms.map(classroom => ({
+                ...classroom,
+                teacherName: classroom.teacherId ? classroom.teacherId.name : 'Unassigned'
+            }));
+            
+            res.status(200).json(formattedClassrooms);
+        } catch (error) {
+            console.error('Error fetching classrooms:', error);
+            res.status(500).json({ message: 'Error fetching classrooms' });
+        }
+    });
     
+    router.put('/api/auth/admin/update-classrooms/:id', authMiddleware, async (req, res) => {
+        try {
+            console.log('Received update request for classroom:', req.params.id);
+            console.log('Update data:', req.body);
     
+            // Find the classroom by ID
+            const classroom = await Classroom.findById(req.params.id);
+            if (!classroom) {
+                return res.status(404).json({ message: 'Classroom not found' });
+            }
     
+            // Validate teacherId (if provided) and ensure it exists
+            if (req.body.teacherId) {
+                const teacherExists = await Teacher.findById(req.body.teacherId);
+                if (!teacherExists) {
+                    return res.status(400).json({ message: 'Teacher does not exist' });
+                }
+            }
     
+            // Validate if students don't exceed classroom capacity
+            if (req.body.students && req.body.students.length > classroom.capacity) {
+                return res.status(400).json({ message: 'Cannot exceed classroom capacity' });
+            }
     
+            // Update classroom data
+            Object.assign(classroom, req.body);
+            await classroom.save();
+    
+            console.log('Classroom updated successfully');
+            res.json(classroom); // Respond with the updated classroom
+        } catch (error) {
+            console.error('Error while updating classroom:', error);
+            res.status(500).json({ message: 'Error while updating classroom' });
+        }
+    });
+    
+
+
     module.exports = router;
